@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>My World</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  :root {
+    --bg: #0b1120; --surface: #131c2e; --surface2: #1e2d45;
+    --border: #1e2d45; --gold: #c9a84c; --gold-light: #e8c97a;
+    --gold-dim: rgba(201,168,76,0.15); --text: #e8ddd0; --muted: #7a8694;
+    --red: #e05252;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+
+/* HEADER */
+#header {
+display:flex; align-items:center; justify-content:space-between;
+padding:12px 20px; background:var(–surface);
+border-bottom:1px solid var(–border); flex-shrink:0;
+box-shadow:0 2px 20px rgba(0,0,0,0.4);
+}
+.logo { display:flex; align-items:center; gap:12px; }
+.logo-icon {
+width:34px; height:34px; border-radius:50%;
+background:var(–gold-dim); border:1px solid var(–gold);
+display:flex; align-items:center; justify-content:center; font-size:16px;
+}
+.logo-text { font-family:Georgia,serif; font-size:20px; font-weight:700; color:var(–text); }
+.logo-text span { color:var(–gold); }
+.counter { font-size:13px; color:var(–muted); }
+.counter strong { color:var(–gold); font-size:22px; font-family:Georgia,serif; font-weight:700; margin-right:4px; }
+#btn-add {
+display:flex; align-items:center; gap:8px;
+background:var(–gold); color:#0b1120; border:none;
+border-radius:8px; padding:9px 18px; font-size:13px; font-weight:600;
+cursor:pointer; transition:background 0.2s;
+}
+#btn-add:hover { background:var(–gold-light); }
+
+/* MAP */
+#map { flex:1; position:relative; overflow:hidden; }
+svg { display:block; width:100%; height:100%; cursor:grab; }
+svg.placing { cursor:crosshair; }
+
+/* ZOOM CONTROLS */
+#zoom-controls {
+position:absolute; bottom:36px; right:16px;
+display:flex; flex-direction:column; gap:4px;
+}
+.zoom-btn {
+width:34px; height:34px; background:var(–surface);
+border:1px solid var(–border); border-radius:7px;
+color:var(–gold); font-size:18px; cursor:pointer;
+display:flex; align-items:center; justify-content:center;
+}
+.zoom-btn.reset { color:var(–muted); font-size:13px; }
+.zoom-btn:hover { border-color:var(–gold); }
+
+#map-hint { position:absolute; bottom:12px; left:12px; font-size:11px; color:#3a5070; pointer-events:none; }
+
+/* MANUAL MODE BAR */
+#manual-bar {
+display:none; position:absolute; top:16px; left:50%; transform:translateX(-50%);
+background:var(–gold-dim); border:1px solid var(–gold);
+border-radius:8px; padding:10px 18px; font-size:13px; color:var(–gold);
+pointer-events:none; white-space:nowrap;
+}
+
+/* MODAL */
+.overlay {
+display:none; position:fixed; inset:0;
+background:rgba(0,0,0,0.7); backdrop-filter:blur(4px);
+z-index:2000; align-items:center; justify-content:center;
+}
+.overlay.open { display:flex; }
+.modal {
+background:var(–surface); border:1px solid var(–border);
+border-radius:14px; padding:28px; width:360px;
+box-shadow:0 20px 60px rgba(0,0,0,0.6);
+animation:fadeUp 0.25s ease;
+}
+.modal h2 { font-family:Georgia,serif; font-size:20px; font-weight:700; margin-bottom:6px; }
+.modal-sub { font-size:12px; color:var(–muted); margin-bottom:20px; line-height:1.5; }
+.modal label { display:block; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(–muted); margin-bottom:6px; }
+.modal input {
+width:100%; background:var(–bg); border:1px solid var(–border);
+border-radius:8px; padding:10px 14px; color:var(–text);
+font-size:14px; outline:none; font-family:inherit;
+}
+.modal input:focus { border-color:var(–gold); }
+#modal-hint { font-size:11px; color:var(–muted); margin-top:8px; line-height:1.5; min-height:16px; }
+#modal-hint.warn { color:#e8a020; }
+.modal-actions { display:flex; gap:10px; margin-top:20px; }
+.btn-cancel {
+flex:1; padding:10px; background:transparent;
+border:1px solid var(–border); border-radius:8px;
+color:var(–muted); font-size:13px; cursor:pointer;
+}
+.btn-cancel:hover { border-color:var(–red); color:var(–red); }
+#btn-manual {
+display:none; flex:1; padding:10px; background:transparent;
+border:1px solid var(–gold); border-radius:8px;
+color:var(–gold); font-size:13px; cursor:pointer;
+}
+#btn-confirm {
+flex:2; padding:10px; background:var(–gold); border:none;
+border-radius:8px; color:#0b1120; font-size:13px; font-weight:600; cursor:pointer;
+}
+#btn-confirm:disabled { opacity:0.5; cursor:not-allowed; }
+#btn-confirm:not(:disabled):hover { background:var(–gold-light); }
+
+/* DELETE CONFIRM */
+#del-modal .modal { border-color:var(–red); text-align:center; width:300px; }
+#del-modal .del-icon { font-size:28px; margin-bottom:12px; }
+#del-modal h3 { font-family:Georgia,serif; font-size:16px; margin-bottom:8px; }
+#del-modal p { font-size:12px; color:var(–muted); margin-bottom:20px; }
+#btn-del-confirm { flex:1; padding:10px; background:var(–red); border:none; border-radius:8px; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+
+/* STATUS */
+#status {
+display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+background:var(–surface); border-radius:8px; padding:10px 18px;
+font-size:13px; color:var(–text); box-shadow:0 4px 20px rgba(0,0,0,0.4);
+white-space:nowrap; z-index:3000; animation:fadeUp 0.3s ease;
+}
+
+@keyframes fadeUp {
+from { opacity:0; transform:translateY(10px) translateX(-50%); }
+to   { opacity:1; transform:translateY(0)   translateX(-50%); }
+}
+</style>
+
+</head>
+<body>
+
+<!-- HEADER -->
+
+<div id="header">
+  <div class="logo">
+    <div class="logo-icon">🧭</div>
+    <div class="logo-text">My <span>World</span></div>
+  </div>
+  <div class="counter"><strong id="count">0</strong> Orte besucht</div>
+  <button id="btn-add">＋ Ort hinzufügen</button>
+</div>
+
+<!-- MAP -->
+
+<div id="map">
+  <svg id="svg"></svg>
+  <div id="zoom-controls">
+    <button class="zoom-btn" id="z-in">＋</button>
+    <button class="zoom-btn" id="z-out">−</button>
+    <button class="zoom-btn reset" id="z-reset">↺</button>
+  </div>
+  <div id="map-hint">Scroll zum Zoomen · Ziehen zum Navigieren</div>
+  <div id="manual-bar">📍 Klicke auf die Karte um den Pin zu setzen</div>
+</div>
+
+<!-- ADD MODAL -->
+
+<div class="overlay" id="add-modal">
+  <div class="modal">
+    <h2>✈️ Neues Reiseziel</h2>
+    <p class="modal-sub">Gib einen Ort ein — der Pin wird automatisch gesetzt.</p>
+    <label>Ort / Stadt / Region</label>
+    <input type="text" id="loc-input" placeholder="z.B. Tokyo, Bali, Toskana…" autocomplete="off"/>
+    <div id="modal-hint"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btn-cancel">Abbrechen</button>
+      <button id="btn-manual">Manuell setzen</button>
+      <button id="btn-confirm">Pin setzen</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE MODAL -->
+
+<div class="overlay" id="del-modal">
+  <div class="modal">
+    <div class="del-icon">🗑</div>
+    <h3>Ort entfernen?</h3>
+    <p id="del-name"></p>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btn-del-cancel">Abbrechen</button>
+      <button id="btn-del-confirm">Löschen</button>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS -->
+
+<div id="status"></div>
+
+<script>
+const W = 960, H = 500;
+const STORAGE_KEY = 'travel-places-v3';
+
+const DEFAULT_PLACES = [
+  { id:1,  name:'Athen',         lat:37.9838,  lng:23.7275  },
+  { id:2,  name:'Berlin',        lat:52.5200,  lng:13.4050  },
+  { id:3,  name:'Lissabon',      lat:38.7223,  lng:-9.1393  },
+  { id:4,  name:'Kapstadt',      lat:-33.9249, lng:18.4241  },
+  { id:5,  name:'Sydney',        lat:-33.8688, lng:151.2093 },
+  { id:6,  name:'Paris',         lat:48.8566,  lng:2.3522   },
+  { id:7,  name:'Köln',          lat:50.9333,  lng:6.9500   },
+  { id:8,  name:'München',       lat:48.1351,  lng:11.5820  },
+  { id:9,  name:'Los Angeles',   lat:34.0522,  lng:-118.2437},
+  { id:10, name:'San Francisco', lat:37.7749,  lng:-122.4194},
+  { id:11, name:'Las Vegas',     lat:36.1699,  lng:-115.1398},
+  { id:12, name:'Ibiza',         lat:38.9067,  lng:1.4206   },
+  { id:13, name:'Mallorca',      lat:39.6953,  lng:3.0176   },
+  { id:14, name:'Kreta',         lat:35.2401,  lng:24.8093  },
+  { id:15, name:'New York',      lat:40.7128,  lng:-74.0060 },
+];
+
+// ── State ───────────────────────────────────────────────────────────────────
+let places = [];
+let currentTransform = d3.zoomIdentity;
+let manualMode = null;
+let pendingDeleteId = null;
+let activeTooltipId = null;
+let statusTimer = null;
+
+// ── Load / Save ─────────────────────────────────────────────────────────────
+function loadPlaces() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    places = raw ? JSON.parse(raw) : DEFAULT_PLACES;
+  } catch { places = DEFAULT_PLACES; }
+}
+function savePlaces() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(places)); } catch {}
+}
+
+// ── Map Setup ───────────────────────────────────────────────────────────────
+const svg = d3.select('#svg');
+const svgEl = document.getElementById('svg');
+
+const defs = svg.append('defs');
+const grad = defs.append('radialGradient').attr('id','oceanGrad').attr('cx','50%').attr('cy','40%').attr('r','70%');
+grad.append('stop').attr('offset','0%').attr('stop-color','#0f2444');
+grad.append('stop').attr('offset','100%').attr('stop-color','#060d1a');
+const filter = defs.append('filter').attr('id','glow');
+filter.append('feGaussianBlur').attr('stdDeviation','2').attr('result','blur');
+const merge = filter.append('feMerge');
+merge.append('feMergeNode').attr('in','blur');
+merge.append('feMergeNode').attr('in','SourceGraphic');
+
+svg.append('rect').attr('width',W).attr('height',H).attr('fill','url(#oceanGrad)');
+
+const g = svg.append('g').attr('id','world-g');
+
+const projection = d3.geoNaturalEarth1().scale(153).translate([W/2, H/2]);
+const pathGen = d3.geoPath().projection(projection);
+
+// Zoom
+const zoom = d3.zoom()
+  .scaleExtent([1, 80])
+  .translateExtent([[-W*2,-H*2],[W*3,H*3]])
+  .on('zoom', (e) => {
+    currentTransform = e.transform;
+    g.attr('transform', e.transform);
+    updateMarkerScale();
+    updateTooltipScale();
+    // keep stroke widths sharp
+    g.selectAll('.country').attr('stroke-width', 0.5 / e.transform.k);
+    g.selectAll('.graticule').attr('stroke-width', 0.4 / e.transform.k);
+    g.selectAll('.sphere').attr('stroke-width', 0.5 / e.transform.k);
+  });
+
+svg.call(zoom);
+
+document.getElementById('z-in').onclick    = () => svg.transition().duration(300).call(zoom.scaleBy, 2);
+document.getElementById('z-out').onclick   = () => svg.transition().duration(300).call(zoom.scaleBy, 0.5);
+document.getElementById('z-reset').onclick = () => svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
+
+// Load geo
+fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+  .then(r => r.json())
+  .then(topo => {
+    const geo = topoToGeo(topo, topo.objects.countries);
+    g.append('path').datum({type:'Sphere'}).attr('class','sphere')
+      .attr('d', pathGen).attr('fill','none').attr('stroke','#1e3050').attr('stroke-width',0.5);
+    g.append('path').datum(d3.geoGraticule()()).attr('class','graticule')
+      .attr('d', pathGen).attr('fill','none').attr('stroke','rgba(30,60,100,0.4)').attr('stroke-width',0.4);
+    g.selectAll('.country').data(geo.features).enter().append('path')
+      .attr('class','country').attr('d', pathGen)
+      .attr('fill','#1a2e4a').attr('stroke','#0d1e35').attr('stroke-width',0.5);
+    renderMarkers();
+  })
+  .catch(() => renderMarkers());
+
+// ── Markers ─────────────────────────────────────────────────────────────────
+function markerScale() { return Math.sqrt(currentTransform.k) / currentTransform.k; }
+
+function renderMarkers() {
+  g.selectAll('.marker-g').remove();
+  places.forEach(place => addMarker(place));
+  document.getElementById('count').textContent = places.length;
+}
+
+function addMarker(place) {
+  const pt = projection([place.lng, place.lat]);
+  if (!pt) return;
+  const s = markerScale();
+  const r = 3 * s;
+
+  const mg = g.append('g')
+    .attr('class','marker-g')
+    .attr('data-id', place.id)
+    .attr('transform',`translate(${pt[0]},${pt[1]})`)
+    .style('cursor','pointer')
+    .on('click', (e) => { e.stopPropagation(); toggleTooltip(place, pt); });
+
+  mg.append('circle').attr('class','hit').attr('r', r*3).attr('fill','transparent');
+  mg.append('circle').attr('class','ring').attr('r', r*2.2)
+    .attr('fill','none').attr('stroke','rgba(201,168,76,0.3)').attr('stroke-width', 0.5*s);
+  mg.append('circle').attr('class','dot').attr('r', r)
+    .attr('fill','#c9a84c').attr('stroke','#0b1120').attr('stroke-width', 0.8*s)
+    .attr('filter','url(#glow)');
+}
+
+function updateMarkerScale() {
+  const s = markerScale();
+  const r = 3 * s;
+  g.selectAll('.marker-g').each(function(d, i) {
+    const mg = d3.select(this);
+    mg.select('.hit').attr('r', r*3);
+    mg.select('.ring').attr('r', r*2.2).attr('stroke-width', 0.5*s);
+    const id = +this.dataset.id;
+    const isActive = id === activeTooltipId;
+    mg.select('.dot').attr('r', isActive ? r*1.5 : r).attr('stroke-width', 0.8*s);
+  });
+}
+
+// ── Tooltip ─────────────────────────────────────────────────────────────────
+function toggleTooltip(place, pt) {
+  if (activeTooltipId === place.id) {
+    closeTooltip(); return;
+  }
+  closeTooltip();
+  activeTooltipId = place.id;
+  updateMarkerScale();
+  const s = markerScale();
+  const bw=130*s, bh=58*s, pad=10*s, fs=11*s;
+  const x=pt[0]+6*s, y=pt[1]-bh-5*s;
+
+  const tg = g.append('g').attr('class','tooltip-g').on('click',(e)=>e.stopPropagation());
+  tg.append('rect').attr('x',x).attr('y',y).attr('width',bw).attr('height',bh)
+    .attr('rx',4*s).attr('ry',4*s)
+    .attr('fill','#131c2e').attr('stroke','#c9a84c').attr('stroke-width',0.8*s)
+    .style('filter','drop-shadow(0 4px 10px rgba(0,0,0,0.5))');
+  tg.append('text').attr('x',x+pad).attr('y',y+18*s)
+    .attr('fill','#e8ddd0').attr('font-size',fs*1.15).attr('font-weight','700')
+    .attr('font-family','Georgia,serif').text(place.name);
+  tg.append('text').attr('x',x+pad).attr('y',y+28*s)
+    .attr('fill','#7a8694').attr('font-size',fs*0.8).attr('font-family','sans-serif')
+    .text(`${place.lat.toFixed(2)}°, ${place.lng.toFixed(2)}°`);
+  tg.append('text').attr('x',x+pad).attr('y',y+41*s)
+    .attr('fill','#c9a84c').attr('font-size',fs*0.9).attr('font-family','sans-serif')
+    .style('cursor','pointer').text('🗑 Entfernen')
+    .on('click',(e)=>{ e.stopPropagation(); openDeleteModal(place); });
+  tg.append('text').attr('x',x+bw-5*s).attr('y',y+13*s)
+    .attr('fill','#7a8694').attr('font-size',fs*1.2).attr('text-anchor','end')
+    .style('cursor','pointer').text('×')
+    .on('click',(e)=>{ e.stopPropagation(); closeTooltip(); });
+}
+
+function closeTooltip() {
+  g.selectAll('.tooltip-g').remove();
+  activeTooltipId = null;
+  updateMarkerScale();
+}
+
+function updateTooltipScale() {
+  if (!activeTooltipId) return;
+  const place = places.find(p => p.id === activeTooltipId);
+  if (!place) return;
+  const pt = projection([place.lng, place.lat]);
+  if (!pt) return;
+  g.selectAll('.tooltip-g').remove();
+  const s = markerScale();
+  const bw=130*s, bh=58*s, pad=10*s, fs=11*s;
+  const x=pt[0]+6*s, y=pt[1]-bh-5*s;
+  const tg = g.append('g').attr('class','tooltip-g').on('click',(e)=>e.stopPropagation());
+  tg.append('rect').attr('x',x).attr('y',y).attr('width',bw).attr('height',bh)
+    .attr('rx',4*s).attr('ry',4*s)
+    .attr('fill','#131c2e').attr('stroke','#c9a84c').attr('stroke-width',0.8*s)
+    .style('filter','drop-shadow(0 4px 10px rgba(0,0,0,0.5))');
+  tg.append('text').attr('x',x+pad).attr('y',y+18*s)
+    .attr('fill','#e8ddd0').attr('font-size',fs*1.15).attr('font-weight','700')
+    .attr('font-family','Georgia,serif').text(place.name);
+  tg.append('text').attr('x',x+pad).attr('y',y+28*s)
+    .attr('fill','#7a8694').attr('font-size',fs*0.8).attr('font-family','sans-serif')
+    .text(`${place.lat.toFixed(2)}°, ${place.lng.toFixed(2)}°`);
+  tg.append('text').attr('x',x+pad).attr('y',y+41*s)
+    .attr('fill','#c9a84c').attr('font-size',fs*0.9).attr('font-family','sans-serif')
+    .style('cursor','pointer').text('🗑 Entfernen')
+    .on('click',(e)=>{ e.stopPropagation(); openDeleteModal(place); });
+  tg.append('text').attr('x',x+bw-5*s).attr('y',y+13*s)
+    .attr('fill','#7a8694').attr('font-size',fs*1.2).attr('text-anchor','end')
+    .style('cursor','pointer').text('×')
+    .on('click',(e)=>{ e.stopPropagation(); closeTooltip(); });
+}
+
+// Close tooltip on map click
+svgEl.addEventListener('click', () => { if (!manualMode) closeTooltip(); });
+
+// ── Manual placement ─────────────────────────────────────────────────────────
+svgEl.addEventListener('click', (e) => {
+  if (!manualMode) return;
+  const rect = svgEl.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const scaleY = H / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+  const ix = (mx - currentTransform.x) / currentTransform.k;
+  const iy = (my - currentTransform.y) / currentTransform.k;
+  const coords = projection.invert([ix, iy]);
+  if (!coords) return;
+  const place = { id: Date.now(), name: manualMode, lat: coords[1], lng: coords[0] };
+  places.push(place);
+  savePlaces();
+  addMarker(place);
+  document.getElementById('count').textContent = places.length;
+  document.getElementById('manual-bar').style.display = 'none';
+  svgEl.classList.remove('placing');
+  manualMode = null;
+  showStatus(`✅ ${place.name} manuell gesetzt`);
+});
+
+// ── Add Modal ────────────────────────────────────────────────────────────────
+document.getElementById('btn-add').onclick = openAddModal;
+document.getElementById('btn-cancel').onclick = closeAddModal;
+document.getElementById('add-modal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('add-modal')) closeAddModal();
+});
+
+document.getElementById('loc-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') confirmAdd();
+});
+
+function openAddModal() {
+  document.getElementById('add-modal').classList.add('open');
+  document.getElementById('modal-hint').textContent = '';
+  document.getElementById('modal-hint').className = '';
+  document.getElementById('btn-manual').style.display = 'none';
+  document.getElementById('btn-confirm').textContent = 'Pin setzen';
+  document.getElementById('btn-confirm').disabled = false;
+  document.getElementById('btn-confirm').onclick = confirmAdd;
+  setTimeout(() => document.getElementById('loc-input').focus(), 100);
+}
+
+function closeAddModal() {
+  document.getElementById('add-modal').classList.remove('open');
+  document.getElementById('loc-input').value = '';
+}
+
+document.getElementById('btn-confirm').onclick = confirmAdd;
+
+async function confirmAdd() {
+  const val = document.getElementById('loc-input').value.trim();
+  if (!val) return;
+  const btn = document.getElementById('btn-confirm');
+  btn.disabled = true; btn.textContent = 'Suche…';
+  document.getElementById('modal-hint').textContent = '⏳ Ort wird gesucht…';
+  document.getElementById('modal-hint').className = '';
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&limit=1`, {
+      headers: {'Accept-Language':'de'}
+    });
+    const data = await res.json();
+    if (data?.length > 0) {
+      const place = { id: Date.now(), name: val, lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      places.push(place);
+      savePlaces();
+      addMarker(place);
+      document.getElementById('count').textContent = places.length;
+      closeAddModal();
+      showStatus(`✅ ${place.name} hinzugefügt`);
+      // Fly to
+      const pt = projection([place.lng, place.lat]);
+      if (pt) {
+        const t = d3.zoomIdentity.translate(W/2 - pt[0]*4, H/2 - pt[1]*4).scale(4);
+        svg.transition().duration(900).call(zoom.transform, t);
+      }
+    } else {
+      document.getElementById('modal-hint').textContent = '⚠️ Ort nicht gefunden — nutze «Manuell setzen».';
+      document.getElementById('modal-hint').className = 'warn';
+      document.getElementById('btn-manual').style.display = 'flex';
+      btn.textContent = 'Pin setzen'; btn.disabled = false;
+    }
+  } catch {
+    document.getElementById('modal-hint').textContent = '❌ Fehler. Bitte versuche «Manuell setzen».';
+    document.getElementById('modal-hint').className = 'warn';
+    document.getElementById('btn-manual').style.display = 'flex';
+    btn.textContent = 'Pin setzen'; btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-manual').onclick = () => {
+  const val = document.getElementById('loc-input').value.trim();
+  if (!val) return;
+  manualMode = val;
+  closeAddModal();
+  document.getElementById('manual-bar').textContent = `📍 Klicke auf die Karte um «${val}» zu platzieren`;
+  document.getElementById('manual-bar').style.display = 'block';
+  svgEl.classList.add('placing');
+};
+
+// ── Delete Modal ─────────────────────────────────────────────────────────────
+function openDeleteModal(place) {
+  pendingDeleteId = place.id;
+  document.getElementById('del-name').textContent = `«${place.name}» wird gelöscht.`;
+  document.getElementById('del-modal').classList.add('open');
+}
+
+document.getElementById('btn-del-cancel').onclick = () => {
+  document.getElementById('del-modal').classList.remove('open');
+  pendingDeleteId = null;
+};
+
+document.getElementById('btn-del-confirm').onclick = () => {
+  if (!pendingDeleteId) return;
+  places = places.filter(p => p.id !== pendingDeleteId);
+  savePlaces();
+  closeTooltip();
+  g.selectAll(`.marker-g[data-id='${pendingDeleteId}']`).remove();
+  document.getElementById('count').textContent = places.length;
+  document.getElementById('del-modal').classList.remove('open');
+  pendingDeleteId = null;
+  showStatus('🗑 Ort entfernt', 'red');
+};
+
+// ── Status ───────────────────────────────────────────────────────────────────
+function showStatus(msg, color = 'var(--gold)') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.borderColor = color;
+  el.style.border = `1px solid ${color}`;
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => { el.style.display = 'none'; }, 2800);
+}
+
+// ── TopoJSON → GeoJSON ───────────────────────────────────────────────────────
+function topoToGeo(topology, object) {
+  const arcs = topology.arcs;
+  const scale = topology.transform?.scale || [1,1];
+  const translate = topology.transform?.translate || [0,0];
+  function decodeArc(arc) {
+    let x=0, y=0;
+    return arc.map(pt => { x+=pt[0]; y+=pt[1]; return [x*scale[0]+translate[0], y*scale[1]+translate[1]]; });
+  }
+  function getArc(i) { const rev=i<0; const a=decodeArc(arcs[rev?~i:i]); return rev?a.reverse():a; }
+  function ringToCoords(ring) { return ring.flatMap(i=>getArc(i)); }
+  function geomToFeature(geom) {
+    if (!geom) return null;
+    if (geom.type==='Polygon') return {type:'Feature',geometry:{type:'Polygon',coordinates:geom.arcs.map(ringToCoords)},properties:{}};
+    if (geom.type==='MultiPolygon') return {type:'Feature',geometry:{type:'MultiPolygon',coordinates:geom.arcs.map(p=>p.map(ringToCoords))},properties:{}};
+    return null;
+  }
+  return { type:'FeatureCollection', features: object.geometries.map(geomToFeature).filter(Boolean) };
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+loadPlaces();
+</script>
+
+</body>
+</html>
